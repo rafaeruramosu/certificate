@@ -37,10 +37,22 @@ const serverlessConfiguration: AWS = {
           http: {
             path: 'generateCertificate',
             method: 'post',
-            cors: true
-          }
-        }
-      ]
+            cors: true,
+          },
+        },
+      ],
+    },
+    validateCertificate: {
+      handler: 'src/functions/validateCertificate.handler',
+      events: [
+        {
+          http: {
+            path: 'validateCertificate/{id}',
+            method: 'get',
+            cors: true,
+          },
+        },
+      ],
     }
   },
   package: { individually: true },
