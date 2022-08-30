@@ -1,9 +1,10 @@
 import { readFileSync } from "fs";
-import * as path from "path";
+import path from "path";
 
 import { APIGatewayProxyHandler } from "aws-lambda";
-import * as handlebars from 'handlebars';
-import * as dayjs from 'dayjs'
+import chromium from 'chrome-aws-lambda';
+import handlebars from 'handlebars';
+import dayjs from 'dayjs'
 
 import { document } from '../utils/dynamodbClient';
 
@@ -60,12 +61,32 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     grade,
     medal,
     date: dayjs().format('DD/MM/YYYY'),
-  }
+  };
 
-  const content = await compile(data)
+  const content = await compile(data);
+
+  const browser = await chromium.puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath,
+  });
+
+  const page = await browser.newPage();
+
+  await page.setContent(content);
+  
+  const pdf = await page.pdf({
+    format: 'a4',
+    landscape: true,
+    printBackground: true,
+    preferCSSPageSize: true,
+    path: process.env.IS_OFFLINE ? './certificate.pdf' : null
+  });
+
+  await browser.close();
 
   return {
     statusCode: 201,
-    body: JSON.stringify(response.Items[0])
-  }
-}
+    body: JSON.stringify(response.Items[0]),
+  };
+};
