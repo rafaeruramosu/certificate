@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import path from "path";
 
 import { APIGatewayProxyHandler } from "aws-lambda";
+import { S3 } from 'aws-sdk';
 import chromium from 'chrome-aws-lambda';
 import handlebars from 'handlebars';
 import dayjs from 'dayjs'
@@ -33,16 +34,6 @@ const compile = async (data: Template) => {
 export const handler: APIGatewayProxyHandler = async (event) => {
   const { id, name, grade } = JSON.parse(event.body) as CreateCertificate;
 
-  await document.put({
-    TableName: 'users_certificate',
-    Item: {
-      id,
-      name,
-      grade,
-      created_at: new Date().getTime()
-    }
-  }).promise();
-
   const response = await document.query({
     TableName: 'users_certificate',
     KeyConditionExpression: 'id = :id',
@@ -51,8 +42,21 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     }
   }).promise();
 
-  const medalPath = path.join(process.cwd(), 'src', 'templates', 'selo.png');
+  const userAlreadyExists = response.Items[0];
 
+  if(!userAlreadyExists) {
+    await document.put({
+      TableName: 'users_certificate',
+      Item: {
+        id,
+        name,
+        grade,
+        created_at: new Date().getTime()
+      }
+    }).promise();
+  }
+
+  const medalPath = path.join(process.cwd(), 'src', 'templates', 'selo.png');
   const medal = readFileSync(medalPath, 'base64');
 
   const data: Template = {
@@ -72,7 +76,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
   });
 
   const page = await browser.newPage();
-
   await page.setContent(content);
   
   const pdf = await page.pdf({
@@ -85,8 +88,21 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
   await browser.close();
 
+  const s3 = new S3();
+
+  await s3.putObject({
+    Bucket: 'certificate',
+    Key: `${id}.pdf`,
+    ACL: 'public-read',
+    Body: pdf,
+    ContentType: 'application/pdf'
+  }).promise();
+
   return {
     statusCode: 201,
-    body: JSON.stringify(response.Items[0]),
+    body: JSON.stringify({
+      message: 'Certificate created successfully.',
+      url: `https://certificate.s3.amazonaws.com/${id}.pdf`
+    }),
   };
 };
